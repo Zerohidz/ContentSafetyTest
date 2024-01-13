@@ -1,8 +1,5 @@
 ﻿using ContentSafetyTest;
 
-// TODO: range bilgisi yap
-
-// DONE: onlyCheckForSexuality yerine hangi aralıkta ne var onu yazdır
 
 internal class Program
 {
@@ -16,11 +13,20 @@ internal class Program
         ImageContentAnalyzer imageContentAnalyzer = new(endpoint, apiKey);
 
         Console.WriteLine("Analyzing the video...");
-        var unsafeFrames = imageContentAnalyzer.GetUnsafeTimestamps("gta_small.mp4", 1f);
+        var unsafeRangesDictionary = imageContentAnalyzer.GetUnsafeRanges("gta_small.mp4", 1f);
         Console.WriteLine("Finished analyzing.\n");
 
         Console.WriteLine("Writing unsafe frames to a text file...");
-        File.WriteAllLines("unsafeFrames.txt", unsafeFrames.Select(f => f.ToString()));
+        using StreamWriter sw = new("unsafe_frames.txt");
+        foreach (var (category, ranges) in unsafeRangesDictionary)
+        {
+            sw.WriteLine($"{category}:");
+            foreach (var range in ranges)
+            {
+                sw.WriteLine(range);
+            }
+            sw.WriteLine();
+        }
         Console.WriteLine("Done.\n");
     }
 }

@@ -7,7 +7,8 @@ namespace ContentSafetyTest;
 
 internal record ImageContentAnalyzer
 {
-    private static string _framesDirectory = Path.Combine(Environment.CurrentDirectory, "frames");
+    private static readonly string _framesDirectory = Path.Combine(Environment.CurrentDirectory, "frames");
+    private static readonly ImageCategory[] s_ImageCategories = [ImageCategory.Violence, ImageCategory.SelfHarm, ImageCategory.Sexual, ImageCategory.Hate];
 
     private string _endpoint;
     private string _apiKey;
@@ -62,7 +63,7 @@ internal record ImageContentAnalyzer
         }
     }
 
-    public string[] GetUnsafeTimestamps(string videoPath, float ssPerSeconds)
+    public Dictionary<ImageCategory, List<string>> GetUnsafeRanges(string videoPath, float ssPerSeconds)
     {
         VideoProcessor.SaveFramesFromVideo(videoPath, _framesDirectory, ssPerSeconds);
 
@@ -80,28 +81,42 @@ internal record ImageContentAnalyzer
         Task.WaitAll(results.ToArray());
         //Directory.Delete(_framesDirectory, true);
 
-        List<string> unsafeFrames = new();
-        for (int i = 0; i < results.Count; i++)
+        Dictionary<ImageCategory, List<string>> unsafeRanges = s_ImageCategories.Select(c => (c, new List<string>())).ToDictionary();
+        string? rangeStart = null;
+        string? lastFrame = null;
+        foreach (ImageCategory categoryKind in s_ImageCategories)
         {
-            var result = results[i].Result;
-            string frameName = Path.GetFileNameWithoutExtension(frames[i]);
-
-            string description = " Resim işlenirken hata oluştu. Detaylı bilgi için console'a bakın.";
-            if (result != null)
+            for (int i = 0; i < results.Count; i++)
             {
-                description = string.Empty;
-                foreach (var category in result)
-                {
-                    if (category.Severity!.Value > 0)
-                        description = " " + category.Category.ToString() + ": " + category.Severity.Value;
-                }
-            }
+                var result = results[i].Result;
+                string frameName = Path.GetFileNameWithoutExtension(frames[i]);
 
-            if (description != string.Empty)
-                unsafeFrames.Add(frameName + description);
+                if (result == null)
+                    continue;
+
+                bool isUnsafe = result.Where(c => c.Category == categoryKind).FirstOrDefault()?.Severity!.Value > 0;
+
+                if (isUnsafe)
+                {
+                    rangeStart ??= frameName;
+                }
+                else
+                {
+                    if (rangeStart != null)
+                    {
+                        if (rangeStart == lastFrame)
+                            unsafeRanges[categoryKind].Add(rangeStart + ": " + categoryKind.ToString());
+                        else
+                            unsafeRanges[categoryKind].Add(rangeStart + " -> " + lastFrame + ": " + categoryKind.ToString());
+
+                        rangeStart = null;
+                    }
+                }
+                lastFrame = frameName;
+            }
         }
 
-        return unsafeFrames.ToArray();
+        return unsafeRanges;
     }
 
     private static Image<Bgr, byte> GetDownscaledImage(string? imagePath)
