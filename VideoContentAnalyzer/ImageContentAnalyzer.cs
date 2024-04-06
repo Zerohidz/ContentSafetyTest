@@ -3,7 +3,7 @@ using Azure.AI.ContentSafety;
 using Emgu.CV.Structure;
 using Emgu.CV;
 
-namespace ContentSafetyTest;
+namespace VideoContentAnalyzer;
 
 internal record ImageContentAnalyzer
 {
@@ -65,6 +65,8 @@ internal record ImageContentAnalyzer
 
     public Dictionary<ImageCategory, List<string>> GetUnsafeRanges(string videoPath, float ssPerSeconds)
     {
+        if (!File.Exists(videoPath))
+            throw new("Video Path Not Found!");
         VideoProcessor.SaveFramesFromVideo(videoPath, _framesDirectory, ssPerSeconds);
 
         string[] frames = Directory.GetFiles(_framesDirectory, "*.png");
@@ -79,7 +81,7 @@ internal record ImageContentAnalyzer
             results.Add(GetAnalysisAsync(frames[i]));
         }
         Task.WaitAll(results.ToArray());
-        //Directory.Delete(_framesDirectory, true);
+        Directory.Delete(_framesDirectory, true);
 
         Dictionary<ImageCategory, List<string>> unsafeRanges = s_ImageCategories.Select(c => (c, new List<string>())).ToDictionary();
         string? rangeStart = null;
@@ -117,6 +119,22 @@ internal record ImageContentAnalyzer
         }
 
         return unsafeRanges;
+    }
+
+    public void SaveUnsafeRangesToFile(Dictionary<ImageCategory, List<string>> unsafeRanges, string outputPath)
+    {
+        using StreamWriter sw = new(outputPath);
+        foreach (var (category, ranges) in unsafeRanges)
+        {
+            sw.WriteLine(category.ToString());
+            foreach (string range in ranges)
+            {
+                sw.WriteLine(range);
+            }
+            sw.WriteLine();
+        }
+
+        Console.WriteLine("Unsafe ranges saved to file.");
     }
 
     private static Image<Bgr, byte> GetDownscaledImage(string? imagePath)
